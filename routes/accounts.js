@@ -217,26 +217,59 @@ router.get('/api/maioresSaldos', (req, res) => {
 
 
 /*FALTA SÓ ESSA*/
-router.put('/api/privateAccount', (req, res) => {
+router.put('/api/privateAccounts', (req, res) => {
     Account.find((err, accounts) => {
-        if(err){
-            res.status(404).send('Contas não localizadas')
-            throw err
-        }
+        if(err) throw err
 
-        const sortedPerBalance = accounts.reduce((account, currentAccount) => {
-            return currentAccount.salario > account.salario ? currentAccount : account
+        const agencias = accounts.map(account => account.agencia)
+        const uniqueAgencies = new Set(agencias)
+        const agenciasNoRepeat = [...uniqueAgencies]
+        const accountsPerAgencies = {}
+        let biggerBalances = []
+        const privateAgency = 99
+        let privateAccounts = []
+
+        agenciasNoRepeat.map(agencia => {
+            return accountsPerAgencies[agencia] = []
         })
-
-        const result = sortedPerBalance.slice(0,quantidade)
-        res.status(302).json(result)
+        
+        
+       accounts.forEach(account => {
+           for (const agencia in accountsPerAgencies) {
+               if (parseInt(agencia) === account.agencia) {
+                   const element = accountsPerAgencies[agencia];
+                   element.push(account)
+                   
+               }
+           }
+       })
+        
+    
+    for (const agencia in accountsPerAgencies) {
+        const element = accountsPerAgencies[agencia];
+        
+        element.sort((a,b) => {
+            return b.balance - a.balance
+        })
+        biggerBalances.push(element)
+    }
+         
+    let finalBalances = biggerBalances.map(arrAccounts => {
+        return arrAccounts[0]
     })
 
-    //let chinesas = funcionarios.filter((funcionario) => {
-    //    return funcionario.genero == 'F' && funcionario.pais == 'China'
-    //}).reduce((func, funcAtual) => {
-    //    return funcAtual.salario > func.salario ? funcAtual : func
-    //})
+    finalBalances.forEach(account => {
+        Account.findByIdAndUpdate({_id: account._id}, {$set: {agencia: privateAgency}}, {new: true, runValidators:true}, (err, account) =>{
+            if(err) {
+                res.status(404).send('Não foi possível localizar as contas')
+                throw err
+            }
+            privateAccounts.push(account)
+            console.log(privateAccounts)
+        })
+    })
+    })
+
 })
 
 module.exports = router
