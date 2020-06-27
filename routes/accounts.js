@@ -1,63 +1,242 @@
 const express = require('express')
 const router = express.Router()
-const controller = require('../controllers/account.controller')
+const mongoose = require('mongoose')
+const db = mongoose.connection
+const uri = 'mongodb+srv://admin:admin@clusterigti4-ikunu.mongodb.net/bank?retryWrites=true&w=majority'
+const Account = require('../models/account.model')
+const format = require('../helpers/formatNumber')
 
+mongoose.connect(uri, {useNewUrlParser: true,  useUnifiedTopology: true, useFindAndModify: false});
+db.on('error', console.error.bind(console, 'connection error:'));
+db.once('open', function() {
+  console.log('connected!')
+});
 
 
 
 
 router.route('/api/accounts')
-    .get(async (req, res) => {
-        const accounts = await controller.getAccounts()
-        const response = accounts ? res.status(302).json(accounts) : res.status(404).send('Dados não encontrados')
-        return response
+    .get((req, res) => {
+        Account.find((err, accounts) => {
+            if(err){
+                res.status(404).send('Dados não encontrados')
+                throw err
+            }
+            res.status(302).json(accounts)
+        })
     })
     .post((req, res) => {
         const {agencia, conta, name, balance} = req.body
-        controller.createAccount({agencia, conta, name, balance})
-        res.status(201).send('Account created!')
+        
+        Account.create({agencia, conta, name, balance}, function (err, account) {
+            if (err) {
+                console.log(err)
+                res.status(501).send('Não foi possível realizar o cadastro')
+            }
+            res.status(201).send(`Account created: 
+                Agência ${account.agencia}
+                Conta: ${account.conta}
+                Name: ${account.name}
+                Saldo: ${format.formatMoney(account.balance)}`)
+          });
+    
+        
     })
 
 
 router.route('/api/account')
-    .get(async (req, res) => {
+    .get((req, res) => {
         const {agencia, conta} = req.body
-        const account = await controller.getAccount({agencia, conta})
-        const response = account ? res.status(302).json(account) : res.status(404).send('Conta não localizada')
-        return response
+        Account.findOne({agencia, conta}, (err, account) => {
+            if(err){
+                res.status(404).send('Conta não localizada')
+                throw err
+            }
+            res.status(302).json(account)
+        })
 })
 
 router.route('/api/deposit')
-    .put(async (req, res) => {
+    .put((req, res) => {
     const {agencia, conta, value} = req.body
-    const accountDeposit = await controller.deposit({agencia, conta, value})
+    Account.findOneAndUpdate({agencia, conta}, {$inc: {balance:value}}, {new: true}, (err, account) => {
+        if(err){
+            res.status(404).send('Agência ou conta inválida')
+            throw err
+        }
+        res.status(302).send(`Depósito realizado: 
+        Data: ${new Date()}  
+        Agência: ${account.agencia} 
+        Conta: ${account.conta}  
+        Valor: ${format.formatMoney(value)} `)
+    })
 
-    const response = accountDeposit ? res.status(302).send(`Depósito realizado: Data: ${new Date()} | 
-    Agência: ${accountDeposit.agencia} |  
-    Conta: ${accountDeposit.conta} |  
-    Valor: ${value} `) : res.status(404).send('Agência ou conta inválida')
 
-    return response
 })
 
 router.route('/api/draw')
-    .put(async (req, res) => {
+    .put((req, res) => {
     const {agencia, conta, value} = req.body
-    const accountToDraw = await controller.draw({agencia, conta, value})
     
-    const response = accountToDraw === false ? res.status(404).send('Dados inválidos') :
-     accountToDraw.agencia === undefined || null || accountToDraw.conta == undefined || null ? 
-    res.status(400).send('Valor de saque superior ao saldo da conta') :
-    res.status(302).send(`Saque realizado: Data: ${new Date()} | 
-    Agência: ${accountToDraw.agencia} |  
-    Conta: ${accountToDraw.conta} |  
-    Valor: ${value} `) 
+    Account.findOne({agencia, conta}, (err, account) => {
+        if(err){
+            res.status(404).send('Agência ou conta inválida')
+            throw err
+            
+        }
+        const {agencia, conta, balance} = account 
+        const currentBalance = balance
+        const newBalance = currentBalance - value
+
+        Account.findOneAndUpdate({agencia, conta}, {$set: {balance: newBalance}}, {new: true, runValidators:true}, (err, data) => {
+            if(err) {
+                res.status(501).send('Operação inválida, saldo insuficiente')
+                throw err
+            }
+            res.status(302).send(`Saque realizado: Data: ${new Date()} 
+            Agência: ${data.agencia} 
+            Conta: ${data.conta} 
+            Valor: ${format.formatMoney(value)} `) 
+        })
+    })
     
-    return response
+})
+
+router.get('/api/balance', (req, res) => {
+    const {agencia, conta} = req.body
+
+        Account.findOne({agencia, conta}, (err, account) => {
+            if(err){
+                res.status(404).send('Conta não localizada')
+                throw err
+            }
+            res.status(302).send(`O saldo da conta é: ${format.formatMoney(account.balance)}`)
+        })
+})
+
+router.delete('/api/deleteAccount', (req, res) => {
+    const {agencia, conta} = req.body
+
+    Account.deleteOne({agencia, conta}, (err) => {
+        if(err){
+            res.status(404).send('Conta não localizada')
+            throw err
+        }
+        Account.find({agencia}, (err, accounts) => {
+            if(err){
+                res.status(404).send('Contas não localizadas')
+                throw err
+            }
+            res.status(302).json(accounts)
+        })
+    })
+
+})
+
+router.put('/api/transfer', (req, res) => {
+    const {agenciaDestino, contaDestino, agenciaOrigem, contaOrigem, value} = req.body
+    const agencias = [agenciaDestino, agenciaOrigem]
+    const contas = [contaDestino, contaOrigem]
+    
+    Account.find({agencia: {$in: agencias}, conta: {$in: contas}}, (err, accounts) => {
+        if(err) {
+            res.status(404).send('Não foi possível localizar as contas')
+        }
+
+        const destino = accounts[0]
+        const origem = accounts[1]
+        const taxa = destino.agencia === origem.agencia ? 0 : 8
+
+        const newBalanceOrigem = (origem.balance) - (value + taxa)
+        const newBalanceDestino = destino.balance + value
+
+        Account.findOneAndUpdate({agencia: origem.agencia, conta: origem.conta}, {$set: {balance: newBalanceOrigem}}, {new: true, runValidators:true}, (err, account) => {
+            if(err) {
+                res.status(501).send('Operação inválida, saldo insuficiente')
+                throw err
+            }
+
+            Account.findOneAndUpdate({agencia: destino.agencia, conta: destino.conta}, {$set: {balance: newBalanceDestino}}, {new: true, runValidators:true}, (err) => {
+                if(err) {
+                    throw err
+                }
+                res.status(302).send(`Transferência realizada com sucesso: 
+                Data: ${new Date()} 
+                Novo saldo: ${format.formatMoney(account.balance)} `) 
+            })
+        })
+
+    })
+})
+
+router.get('/api/averageBalance', (req, res) => {
+    const {agencia} = req.body
+    Account.find({agencia}, (err, accounts) => {
+        if(err){
+            res.status(404).send('Contas não localizadas')
+            throw err
+        }
+        const balances = accounts.reduce((accumulator, current) => {
+            return accumulator+ current.balance
+        },0)
+        const average = (balances/accounts.length)
+        res.status(302).send(`A média de saldo das contas para a agência ${agencia} é de ${format.formatMoney(average)}`)
+    })
+})
+
+router.get('/api/menoresSaldos', (req, res) => {
+    const {quantidade} = req.body
+    Account.find((err, accounts) => {
+        if(err){
+            res.status(404).send('Contas não localizadas')
+            throw err
+        }
+        const sortedPerBalance = accounts.sort((a,b) => {
+            return a.balance - b.balance
+        })
+        const result = sortedPerBalance.slice(0,quantidade)
+        res.status(302).json(result)
+    })
+})
+
+router.get('/api/maioresSaldos', (req, res) => {
+    const {quantidade} = req.body
+    Account.find((err, accounts) => {
+        if(err){
+            res.status(404).send('Contas não localizadas')
+            throw err
+        }
+        const sortedPerBalance = accounts.sort((a,b) => {
+            return b.balance - a.balance
+        })
+        const result = sortedPerBalance.slice(0,quantidade)
+        res.status(302).json(result)
+    })
 })
 
 
 
+/*FALTA SÓ ESSA*/
+router.put('/api/privateAccount', (req, res) => {
+    Account.find((err, accounts) => {
+        if(err){
+            res.status(404).send('Contas não localizadas')
+            throw err
+        }
 
+        const sortedPerBalance = accounts.reduce((account, currentAccount) => {
+            return currentAccount.salario > account.salario ? currentAccount : account
+        })
+
+        const result = sortedPerBalance.slice(0,quantidade)
+        res.status(302).json(result)
+    })
+
+    //let chinesas = funcionarios.filter((funcionario) => {
+    //    return funcionario.genero == 'F' && funcionario.pais == 'China'
+    //}).reduce((func, funcAtual) => {
+    //    return funcAtual.salario > func.salario ? funcAtual : func
+    //})
+})
 
 module.exports = router

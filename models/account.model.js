@@ -22,7 +22,7 @@ const accountSchema = new Schema({
     balance: {
         type:Number,
         required: true,
-        min:0
+        min: [0, 'Insuficiente founds for this operation']
     },
   }, {collection: 'accounts', versionKey: false});
 
