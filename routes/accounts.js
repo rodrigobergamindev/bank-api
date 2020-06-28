@@ -215,63 +215,48 @@ router.get('/api/maioresSaldos', (req, res) => {
 })
 
 
-
-/*FALTA SÓ ESSA*/
-
-router.put('/api/updatePrivateAccounts', (req, res) => {
+router.put('/api/privateAccounts', (req, res) => {
     Account.find((err, accounts) => {
         if(err) throw err
 
-        const agencias = accounts.map(account => account.agencia)
-        const uniqueAgencies = new Set(agencias)
-        const agenciasNoRepeat = [...uniqueAgencies]
-        const accountsPerAgencies = {}
-        let biggerBalances = []
-        const privateAgency = 99
-        let privateAccounts = []
+        const privateAgencyNumber = 99
+        const accountsToUpdate = []
+        accounts.sort((a,b) => b.balance - a.balance)
 
-        agenciasNoRepeat.map(agencia => {
-            return accountsPerAgencies[agencia] = []
-        })
-        
-        
-       accounts.forEach(account => {
-           for (const agencia in accountsPerAgencies) {
-               if (parseInt(agencia) === account.agencia) {
-                   const element = accountsPerAgencies[agencia];
-                   element.push(account)
-                   
-               }
-           }
-       })
-        
-    
-    for (const agencia in accountsPerAgencies) {
-        const element = accountsPerAgencies[agencia];
-        
-        element.sort((a,b) => {
-            return b.balance - a.balance
-        })
-        biggerBalances.push(element)
-    }
-         
-    let finalBalances = biggerBalances.map(arrAccounts => {
-        return arrAccounts[0]
-    })
+        function agruparPorAgencia(objetoArray, propriedade) {
+            return objetoArray.reduce(function (acc, obj) {
+              let key = obj[propriedade];
+              if (!acc[key]) {
+                acc[key] = [];
+              }
+              acc[key].push(obj);
+              return acc;
+            }, {});
+          }
 
-    const accountsToUpdate = finalBalances.map(account => account._id)
-    
-    if(accountsToUpdate){
-        Account.updateMany({ _id: { $in: accountsToUpdate } }, { $set: { agencia: privateAgency } }, (err, privateAccounts) => {
-                if(err) {
-                    res.status(501).send('Não foi possível realizar a atualização das contas') 
-                    throw err
-                }
-                
+          const accountsPerAgencies = agruparPorAgencia(accounts, 'agencia');
+
+
+         for (const agencia in accountsPerAgencies) {
+                const element = accountsPerAgencies[agencia];
+                accountsToUpdate.push(element[0]._id)
             }
-          );
-    }
-})
+
+            if(accountsToUpdate){
+                Account.updateMany({ _id: { $in: accountsToUpdate } }, { $set: { agencia: privateAgencyNumber } }, (err) => {
+                        if(err) {
+                            res.status(501).send('Não foi possível realizar a atualização das contas') 
+                            throw err
+                        }  
+                    }
+                  )
+            }
+
+            Account.find({agencia:privateAgencyNumber}, (err, data) => {
+                res.status(302).json(data)
+            })
+        
+    })
 })
 
 module.exports = router
