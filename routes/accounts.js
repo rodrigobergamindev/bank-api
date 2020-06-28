@@ -217,7 +217,8 @@ router.get('/api/maioresSaldos', (req, res) => {
 
 
 /*FALTA SÓ ESSA*/
-router.put('/api/privateAccounts', (req, res) => {
+
+router.put('/api/updatePrivateAccounts', (req, res) => {
     Account.find((err, accounts) => {
         if(err) throw err
 
@@ -258,18 +259,19 @@ router.put('/api/privateAccounts', (req, res) => {
         return arrAccounts[0]
     })
 
-    finalBalances.forEach(account => {
-        Account.findByIdAndUpdate({_id: account._id}, {$set: {agencia: privateAgency}}, {new: true, runValidators:true}, (err, account) =>{
-            if(err) {
-                res.status(404).send('Não foi possível localizar as contas')
-                throw err
+    const accountsToUpdate = finalBalances.map(account => account._id)
+    
+    if(accountsToUpdate){
+        Account.updateMany({ _id: { $in: accountsToUpdate } }, { $set: { agencia: privateAgency } }, (err, privateAccounts) => {
+                if(err) {
+                    res.status(501).send('Não foi possível realizar a atualização das contas') 
+                    throw err
+                }
+                
             }
-            privateAccounts.push(account)
-            console.log(privateAccounts)
-        })
-    })
-    })
-
+          );
+    }
+})
 })
 
 module.exports = router
