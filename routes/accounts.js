@@ -46,8 +46,8 @@ router.route('/api/accounts')
 
 router.route('/api/account')
     .get((req, res) => {
-        const {agencia, conta} = req.body
-        Account.findOne({agencia, conta}, (err, account) => {
+        const {name} = req.body
+        Account.findOne({name}, (err, account) => {
             if(err){
                 res.status(404).send('Conta não localizada')
                 throw err
@@ -134,29 +134,28 @@ router.delete('/api/deleteAccount', (req, res) => {
 })
 
 router.put('/api/transfer', (req, res) => {
-    const {agenciaDestino, contaDestino, agenciaOrigem, contaOrigem, value} = req.body
-    const agencias = [agenciaDestino, agenciaOrigem]
+    const {agencia,contaDestino,contaOrigem, value} = req.body
     const contas = [contaDestino, contaOrigem]
     
-    Account.find({agencia: {$in: agencias}, conta: {$in: contas}}, (err, accounts) => {
+    Account.find({conta: {$in: contas}}, (err, accounts) => {
         if(err) {
             res.status(404).send('Não foi possível localizar as contas')
         }
 
-        const destino = accounts[0]
-        const origem = accounts[1]
+        const destino = accounts[1]
+        const origem = accounts[0]
         const taxa = destino.agencia === origem.agencia ? 0 : 8
-
+        console.log(accounts)
         const newBalanceOrigem = (origem.balance) - (value + taxa)
         const newBalanceDestino = destino.balance + value
 
-        Account.findOneAndUpdate({agencia: origem.agencia, conta: origem.conta}, {$set: {balance: newBalanceOrigem}}, {new: true, runValidators:true}, (err, account) => {
+        Account.findOneAndUpdate({conta: origem.conta}, {$set: {balance: newBalanceOrigem}}, {new: true, runValidators:true}, (err, account) => {
             if(err) {
                 res.status(501).send('Operação inválida, saldo insuficiente')
                 throw err
             }
 
-            Account.findOneAndUpdate({agencia: destino.agencia, conta: destino.conta}, {$set: {balance: newBalanceDestino}}, {new: true, runValidators:true}, (err) => {
+            Account.findOneAndUpdate({conta: destino.conta}, {$set: {balance: newBalanceDestino}}, {new: true, runValidators:true}, (err) => {
                 if(err) {
                     throw err
                 }
