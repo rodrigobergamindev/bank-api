@@ -78,7 +78,7 @@ router.route('/api/draw')
     .put(async (req, res) => {
         try {
             const {agencia, conta, value} = req.body
-                const account = await Account.findOneAndUpdate({agencia, conta}, {$inc: {balance: - (value + 1)}}, {new: true, runValidators:true})
+                const account = await Account.findOneAndUpdate({agencia, conta}, {$min: {balance: 0}, $inc: {balance: - (value + 1)}}, {new: true, runValidators:true})
                     res.status(200).send(
                     `Saque realizado: 
                     Data: ${new Date()} 
@@ -203,14 +203,13 @@ router.get('/api/biggerBalances', async (req, res) => {
     }
 }) //OK
 
-
 router.put('/api/privateAccounts', async (req, res) => {
     try {
         const lower = await Account.aggregate([
             {
                 $group: {
                     _id:"$agencia",
-                    balance: {$min: '$balance'}}
+                    balance: {$max: '$balance'}}
         }
     ])
         res.status(200).json(lower)
