@@ -78,7 +78,7 @@ router.route('/api/draw')
     .put(async (req, res) => {
         try {
             const {agencia, conta, value} = req.body
-                const account = await Account.findOneAndUpdate({agencia, conta}, {$min: {balance: 0}, $inc: {balance: - (value + 1)}}, {new: true, runValidators:true})
+                const account = await Account.findOneAndUpdate({agencia, conta}, {$inc: {balance: - (value + 1)}}, {new: true, runValidators:true})
                     res.status(200).send(
                     `Saque realizado: 
                     Data: ${new Date()} 
@@ -123,7 +123,8 @@ router.delete('/api/deleteAccount', async (req, res) => {
 }) //OK
 
 router.put('/api/transfer', (req, res) => {
-    const {agencia,contaDestino,contaOrigem, value} = req.body
+    const {agenciaOrigem, agenciaDestino,contaDestino,contaOrigem, value} = req.body  
+    
     const contas = [contaDestino, contaOrigem]
     
     Account.find({conta: {$in: contas}}, (err, accounts) => {
@@ -134,21 +135,20 @@ router.put('/api/transfer', (req, res) => {
         const destino = accounts[1]
         const origem = accounts[0]
         const taxa = destino.agencia === origem.agencia ? 0 : 8
-        console.log(accounts)
         const newBalanceOrigem = (origem.balance) - (value + taxa)
         const newBalanceDestino = destino.balance + value
 
-        Account.findOneAndUpdate({conta: origem.conta}, {$set: {balance: newBalanceOrigem}}, {new: true, runValidators:true}, (err, account) => {
+        Account.findOneAndUpdate({conta: origem.conta, agencia: agenciaOrigem}, {$set: {balance: newBalanceOrigem}}, {new: true, runValidators:true}, (err, account) => {
             if(err) {
                 res.status(501).send('Operação inválida, saldo insuficiente')
                 throw err
             }
 
-            Account.findOneAndUpdate({conta: destino.conta}, {$set: {balance: newBalanceDestino}}, {new: true, runValidators:true}, (err) => {
+            Account.findOneAndUpdate({conta: destino.conta, agencia: agenciaDestino}, {$set: {balance: newBalanceDestino}}, {new: true, runValidators:true}, (err) => {
                 if(err) {
                     throw err
                 }
-                res.status(302).send(`Transferência realizada com sucesso: 
+                res.status(200).send(`Transferência realizada com sucesso: 
                 Data: ${new Date()} 
                 Novo saldo: ${format.formatMoney(account.balance)} `) 
             })
@@ -205,14 +205,7 @@ router.get('/api/biggerBalances', async (req, res) => {
 
 router.put('/api/privateAccounts', async (req, res) => {
     try {
-        const lower = await Account.aggregate([
-            {
-                $group: {
-                    _id:"$agencia",
-                    balance: {$max: '$balance'}}
-        }
-    ])
-        res.status(200).json(lower)
+
     } catch (error) {
         console.log('Erro ao consultar menor saldo: ' + error)
         res.status(500).send('Não foi possível consultar o menor saldo')
