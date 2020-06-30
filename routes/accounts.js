@@ -92,7 +92,7 @@ router.route('/api/draw')
             res.status(500).send('Erro ao realizar operação de saque')
         }
     
-}) //OK
+}) //VERIFY
 
 router.get('/api/balance', async (req, res) => {
     try {
@@ -155,7 +155,7 @@ router.put('/api/transfer', (req, res) => {
         })
 
     })
-})
+}) //VERIFY
 
 router.get('/api/averageBalance', async (req, res) => {
     try {
@@ -217,6 +217,6 @@ router.put('/api/privateAccounts', async (req, res) => {
         console.log('Erro ao consultar menor saldo: ' + error)
         res.status(500).send('Não foi possível consultar o menor saldo')
     }
-})
+}) //VERIFY
 
 module.exports = router
