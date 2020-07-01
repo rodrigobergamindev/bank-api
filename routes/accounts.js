@@ -4,9 +4,7 @@ const mongoose = require('mongoose')
 const db = mongoose.connection
 const uri = 'mongodb+srv://admin:admin@clusterigti4-ikunu.mongodb.net/bank?retryWrites=true&w=majority'
 const Account = require('../models/account.model')
-const format = require('../helpers/formatNumber')
 const { formatMoney } = require('../helpers/formatNumber')
-const { query } = require('express')
 
 mongoose.connect(uri, {useNewUrlParser: true,  useUnifiedTopology: true, useFindAndModify: false, useCreateIndex: true});
 db.on('error', console.error.bind(console, 'connection error:'));
