@@ -19,6 +19,9 @@ mongoose.set('runValidators',true)
 
 router.route('/api/accounts')
     .get(async (req, res) => {
+
+        //RETORNA TODAS AS CONTAS
+
         try {
         const accounts = await Account.find()
         res.status(200).json(accounts)
@@ -26,8 +29,11 @@ router.route('/api/accounts')
             console.log('Não foi possível localizar as contas, erro: ' + error)
             res.status(404).send('Contas não localizadas')
         }
-    }) //OK
+    }) 
     .post(async (req, res) => {
+
+        //CRIAÇÃO DE UMA CONTA
+
         try {
             const {agencia, conta, name, balance} = req.body
             const account = await  Account.create({agencia, conta, name, balance})
@@ -38,14 +44,17 @@ router.route('/api/accounts')
                     Saldo: ${format.formatMoney(account.balance)}`)
         } catch (error) {
             console.log('Não é possível criar uma nova conta: ' + error)
-            res.status(501).send('Não foi possível realizar o cadastro')
+            res.status(501).send('Não foi possível criar uma nova conta, revise os dados informados e tente novamente')
         }
         
-    }) //OK
+    }) 
 
 
 router.route('/api/account')
     .get(async (req, res) => {
+
+        //RETORNA INFORMAÇÕES DE UMA CONTA COM BASE NO NOME
+
         const {name} = req.body
         try {
             const account = await Account.findOne({name})
@@ -55,13 +64,16 @@ router.route('/api/account')
             res.status(404).send('Conta não localizada')
             
         }
-}) //OK
+}) 
 
 router.route('/api/deposit')
     .put(async (req, res) => {
+
+        //Operação de depósito
+
         try {
             const {agencia, conta, value} = req.body
-            const account = await Account.findOneAndUpdate({agencia, conta}, {$inc: {balance: value}}, {new: true})
+            const account = await Account.findOneAndUpdate({agencia, conta}, {$inc: {balance: value}}, {new: true}) //incrementando o saldo da conta
             res.status(200).send(`Depósito realizado: 
             Data: ${new Date()}  
             Agência: ${account.agencia} 
@@ -73,17 +85,20 @@ router.route('/api/deposit')
             console.log('Não foi possível realizar a operação de depósito: ' + error)
             res.status(404).send('Agência ou conta inválida')
         }
-}) //OK
+}) 
 
 router.route('/api/draw')
     .put(async (req, res) => {
+
+        //OPERAÇÃO DE SAQUE
+
         try {
-            const {agencia, conta, value} = req.body
+            const {conta, value} = req.body
 
-                const account = await Account.findOne({agencia, conta})
-                const newBalance = account.balance - (value + 1)
+                const account = await Account.findOne({conta})
+                const newBalance = account.balance - (value + 1) //Não foi encontrada uma forma de validar uma operação de atualização com $set e $inc ao mesmo tempo
 
-                const draw = await Account.findOneAndUpdate({agencia, conta}, {$set: {balance: newBalance}} , {new: true, runValidators:true})
+                const draw = await Account.findOneAndUpdate({conta}, {$set: {balance: newBalance}} , {new: true, runValidators:true})
                     res.status(200).send(
                     `Saque realizado: 
                     Data: ${new Date()} 
@@ -97,20 +112,26 @@ router.route('/api/draw')
             res.status(500).send('Erro ao realizar operação de saque')
         }
     
-}) //OK
+}) 
 
 router.get('/api/balance', async (req, res) => {
+
+    //RETORNAR O SALDO DE UMA CONTA
+
     try {
-        const {agencia, conta} = req.body
-        const account = await Account.findOne({agencia, conta})
+        const {conta} = req.body
+        const account = await Account.findOne({conta})
         res.status(200).send(`O saldo da conta é: ${format.formatMoney(account.balance)}`)
     } catch (error) {
         console.log('Erro ao consultar saldo: ' + error)
         res.status(500).send('Erro ao realizar operação')
     }
-}) //OK
+}) 
 
 router.delete('/api/deleteAccount', async (req, res) => {
+
+    //EXCLUIR UMA CONTA E RETORNAR A RELAÇÃO DE CONTAS DAQUELA AGÊNCIA
+
     try {
         const {agencia, conta} = req.body
         Account.deleteOne({agencia, conta})
@@ -125,9 +146,12 @@ router.delete('/api/deleteAccount', async (req, res) => {
         console.log('Erro ao excluir conta: ' + error)
         res.status(500).send('Erro ao excluir conta')
     }
-}) //OK
+}) 
 
 router.put('/api/transfer', async(req, res) => {
+    
+    //TRANSFERÊNCIA ENTRE DUAS CONTAS
+
     try {
         const {contaDestino,contaOrigem, value} = req.body
 
@@ -170,11 +194,14 @@ router.put('/api/transfer', async(req, res) => {
         res.status(500).send('Não foi possível realizar a operação de transferência')
     }
 
-}) //OK
+}) 
  
 
 
 router.get('/api/averageBalance', async (req, res) => {
+
+    //MÉDIA DE SALDOS DE UMA DETERMINADA AGÊNCIA
+
     try {
         const {agencia} = req.body
         const average = await Account.aggregate([
@@ -187,9 +214,12 @@ router.get('/api/averageBalance', async (req, res) => {
         res.status(500).send('Não foi possível consultar a média de saldos')
     }
     
-}) //OK
+}) 
 
 router.get('/api/lowerBalance', async (req, res) => {
+
+    //RETORNAR AS CONTAS EM ORDEM DE MENOR SALDO COM BASE NA QUANTIDADE ESPECIFICADA PELO USUÁRIO
+
     try {
         const {quantidade} = req.body
         const accounts = await Account.aggregate([
@@ -203,9 +233,10 @@ router.get('/api/lowerBalance', async (req, res) => {
         res.status(500).send('Não foi possível consultar as contas com menores saldos')
     }
        
-}) //OK
+}) 
 
 router.get('/api/biggerBalances', async (req, res) => {
+    //RETORNAR AS CONTAS EM ORDEM DE MAIOR SALDO COM BASE NA QUANTIDADE ESPECIFICADA PELO USUÁRIO
     try {
         const {quantidade} = req.body
         const accounts = await Account.aggregate([
@@ -218,15 +249,38 @@ router.get('/api/biggerBalances', async (req, res) => {
         console.log('Erro ao consultar contas com maiores saldos: ' + error)
         res.status(500).send('Não foi possível consultar as contas com maiores saldos')
     }
-}) //OK
+}) 
 
 router.put('/api/privateAccounts', async (req, res) => {
-    try {
 
+    //TRANSFERIR PARA A AGÊNCIA PRIVATE AS CONTAS COM MAIORES SALDOS DE CADA AGÊNCIA
+
+    try {
+        const accounts = await Account.aggregate([
+            {
+                $group:
+                  {
+                    _id: '$agencia', // Group By Expression
+                    balance: { $max: '$balance'}
+                  }
+               },
+               {$sort: {balance: -1}}
+        ])
+
+        const biggerBalances = accounts.filter(account => account._id !== 99)
+        const privateAgencyNumber = 99
+
+        biggerBalances.forEach(async (account) => {
+           await Account.findOneAndUpdate({agencia: account._id}, {$set: {agencia: privateAgencyNumber}} , {new: true, runValidators:true})
+    
+        })
+
+        const privateAccounts = await Account.find({agencia:99})
+        res.status(200).json(privateAccounts)
     } catch (error) {
-        console.log('Erro ao consultar menor saldo: ' + error)
-        res.status(500).send('Não foi possível consultar o menor saldo')
+        console.log('Erro ao consultar as contas da agência private: ' + error)
+        res.status(500).send('Não foi possível consultar as contas da agência private')
     }
-}) //VERIFY
+}) 
 
 module.exports = router
