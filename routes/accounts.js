@@ -6,14 +6,15 @@ const uri = 'mongodb+srv://admin:admin@clusterigti4-ikunu.mongodb.net/bank?retry
 const Account = require('../models/account.model')
 const format = require('../helpers/formatNumber')
 const { formatMoney } = require('../helpers/formatNumber')
+const { query } = require('express')
 
-mongoose.connect(uri, {useNewUrlParser: true,  useUnifiedTopology: true, useFindAndModify: false});
+mongoose.connect(uri, {useNewUrlParser: true,  useUnifiedTopology: true, useFindAndModify: false, useCreateIndex: true});
 db.on('error', console.error.bind(console, 'connection error:'));
 db.once('open', function() {
   console.log('connected!')
 });
 
-
+mongoose.set('runValidators',true)
 
 
 router.route('/api/accounts')
@@ -78,21 +79,25 @@ router.route('/api/draw')
     .put(async (req, res) => {
         try {
             const {agencia, conta, value} = req.body
-                const account = await Account.findOneAndUpdate({agencia, conta}, {$inc: {balance: - (value + 1)}}, {new: true, runValidators:true})
+
+                const account = await Account.findOne({agencia, conta})
+                const newBalance = account.balance - (value + 1)
+
+                const draw = await Account.findOneAndUpdate({agencia, conta}, {$set: {balance: newBalance}} , {new: true, runValidators:true})
                     res.status(200).send(
                     `Saque realizado: 
                     Data: ${new Date()} 
-                    Agência: ${account.agencia} 
-                    Conta: ${account.conta} 
+                    Agência: ${draw.agencia} 
+                    Conta: ${draw.conta} 
                     Valor: ${format.formatMoney(value)} 
-                    Novo saldo: ${formatMoney(account.balance)}
+                    Novo saldo: ${formatMoney(draw.balance)}
                     `) 
         } catch (error) {
             console.log('Erro ao realizar operação de saque: ' + error)
             res.status(500).send('Erro ao realizar operação de saque')
         }
     
-}) //VERIFY
+}) //OK
 
 router.get('/api/balance', async (req, res) => {
     try {
@@ -122,40 +127,52 @@ router.delete('/api/deleteAccount', async (req, res) => {
     }
 }) //OK
 
-router.put('/api/transfer', (req, res) => {
-    const {agenciaOrigem, agenciaDestino,contaDestino,contaOrigem, value} = req.body  
-    
-    const contas = [contaDestino, contaOrigem]
-    
-    Account.find({conta: {$in: contas}}, (err, accounts) => {
-        if(err) {
-            res.status(404).send('Não foi possível localizar as contas')
-        }
+router.put('/api/transfer', async(req, res) => {
+    try {
+        const {contaDestino,contaOrigem, value} = req.body
 
-        const destino = accounts[1]
-        const origem = accounts[0]
-        const taxa = destino.agencia === origem.agencia ? 0 : 8
-        const newBalanceOrigem = (origem.balance) - (value + taxa)
+        const origem = await Account.findOne({conta: contaOrigem})
+        const destino = await Account.findOne({conta: contaDestino})
+        const taxa = origem.agencia === destino.agencia ? 0 : 8
+        const newBalanceOrigem = origem.balance - (value + taxa)
         const newBalanceDestino = destino.balance + value
 
-        Account.findOneAndUpdate({conta: origem.conta, agencia: agenciaOrigem}, {$set: {balance: newBalanceOrigem}}, {new: true, runValidators:true}, (err, account) => {
-            if(err) {
-                res.status(501).send('Operação inválida, saldo insuficiente')
-                throw err
-            }
-
-            Account.findOneAndUpdate({conta: destino.conta, agencia: agenciaDestino}, {$set: {balance: newBalanceDestino}}, {new: true, runValidators:true}, (err) => {
-                if(err) {
-                    throw err
+        /*VALIDATION*/
+        if(newBalanceOrigem >= 0){
+            const transfer = await Account.bulkWrite( [
+                {updateOne :
+                   {
+                      filter: {conta: contaOrigem},
+                      update: {$set : {balance: newBalanceOrigem}}
+                   }
+                },
+                {
+                    updateOne: {
+                        filter: {conta: contaDestino},
+                        update: {$set : {balance: newBalanceDestino}}
+                    }
                 }
-                res.status(200).send(`Transferência realizada com sucesso: 
-                Data: ${new Date()} 
-                Novo saldo: ${format.formatMoney(account.balance)} `) 
-            })
-        })
+             ])
 
-    })
-}) //VERIFY
+            res.status(200).send(`
+            Transferência realizada com sucesso!
+            Data: ${new Date()}
+            Agência: ${origem.agencia}
+            Conta: ${origem.conta}
+            Titular: ${origem.name}
+            Novo saldo: ${formatMoney(newBalanceOrigem)}
+            `)
+        }else{
+            res.status(400).send('Saldo insuficiente para realizar a transferência')
+        }
+    } catch (error) {
+        console.log("Não foi possível realizar a operação de transferência: " + error)
+        res.status(500).send('Não foi possível realizar a operação de transferência')
+    }
+
+}) //OK
+ 
+
 
 router.get('/api/averageBalance', async (req, res) => {
     try {

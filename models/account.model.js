@@ -11,6 +11,7 @@ const accountSchema = new Schema({
     conta: {
         type: Number,
         required: true,
+        unique: true
 
     },
     name: {
