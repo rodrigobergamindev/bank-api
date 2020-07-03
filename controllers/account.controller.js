@@ -28,6 +28,7 @@ const closeConnection = () => {
 const getAccounts = async (req, res) => {
 
     try {
+
         openConnection()
         const accounts = await Account.find()
         res.status(200).json(accounts)
@@ -134,24 +135,29 @@ const draw = async (req, res) => {
         })
         const newBalance = account.balance - (value + 1) //Não foi encontrada uma forma de validar uma operação de atualização com $set e $inc ao mesmo tempo
 
-        const draw = await Account.findOneAndUpdate({
-            conta
-        }, {
-            $set: {
-                balance: newBalance
-            }
-        }, {
-            new: true,
-            runValidators: true
-        })
-        res.status(200).send(
-            `Saque realizado: 
-                Data: ${new Date()} 
-                Agência: ${draw.agencia} 
-                Conta: ${draw.conta} 
-                Valor: ${format.formatMoney(value)} 
-                Novo saldo: ${formatMoney(draw.balance)}
-                `)
+        if(newBalance >=0){
+            const draw = await Account.findOneAndUpdate({
+                conta
+            }, {
+                $set: {
+                    balance: newBalance
+                }
+            }, {
+                new: true,
+                runValidators: true
+            })
+            res.status(200).send(
+                `Saque realizado: 
+                    Data: ${new Date()} 
+                    Agência: ${draw.agencia} 
+                    Conta: ${draw.conta} 
+                    Valor: ${formatMoney(value)} 
+                    Novo saldo: ${formatMoney(draw.balance)}
+                    `)
+            
+        }else{
+            res.status(400).send('Saldo insuficiente para saque')
+        }
         closeConnection()
     } catch (error) {
         console.log('Erro ao realizar operação de saque: ' + error)
